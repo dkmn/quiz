@@ -4224,7 +4224,7 @@ function quiz_jumper_submit($form, &$form_state) {
  */
 function quiz_question_feedback_access($quiz, $question_number) {
   if ($question_number >= 1) {
-    if ($quiz->feedback_time == QUIZ_FEEDBACK_QUESTION) {
+    if (array_filter($quiz->review_options['question'])) {
       $question_index = $question_number;
       if (!empty($_SESSION['quiz']['temp']['result_id'])) {
         $result_id = $_SESSION['quiz']['temp']['result_id'];

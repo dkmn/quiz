@@ -944,11 +944,10 @@ function quiz_question_add_body_field($type) {
  * Return a form with question feedback.
  */
 function quiz_question_feedback($quiz, $question) {
-  if (!empty($_SESSION['quiz']['temp']['result_id'])) {
+  $result_id = $_SESSION['quiz'][$quiz->nid]['result_id'];
+
+  if (!$result_id && !empty($_SESSION['quiz']['temp']['result_id'])) {
     $result_id = $_SESSION['quiz']['temp']['result_id'];
-  }
-  else {
-    $result_id = $_SESSION['quiz'][$quiz->nid]['result_id'];
   }
 
   $types = _quiz_get_question_types();
