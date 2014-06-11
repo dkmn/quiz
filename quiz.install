@@ -116,19 +116,6 @@ function quiz_schema() {
         'not null' => TRUE,
         'default' => 0,
       ),
-      'feedback_time' => array(
-        'type' => 'int',
-        'size' => 'tiny',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-      ),
-      'display_feedback' => array(
-        'type' => 'int',
-        'size' => 'tiny',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-        'default' => 1,
-      ),
       'quiz_open' => array(
         'type' => 'int',
         'unsigned' => TRUE,
@@ -927,6 +914,8 @@ function quiz_update_7504() {
 
 /**
  * Revamping quiz feedback options.
+ *
+ * @todo migration from these fields
  */
 function quiz_update_7505() {
   db_drop_field('quiz_node_properties', 'feedback_time');

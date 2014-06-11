@@ -352,12 +352,12 @@ function quiz_cron() {
 
   if ($rm_time) { // $time = 0 for never.
     db_delete('quiz_node_results')
-    ->condition('time_end', 0)
-    ->where('(:request_time - time_start) > :remove_time', array(
-      ':request_time' => REQUEST_TIME,
-      ':remove_time' => $rm_time
-    ))
-    ->execute();
+      ->condition('time_end', 0)
+      ->where('(:request_time - time_start) > :remove_time', array(
+        ':request_time' => REQUEST_TIME,
+        ':remove_time' => $rm_time
+      ))
+      ->execute();
   }
 }
 
@@ -857,20 +857,20 @@ function quiz_delete($node) {
 
   // Remove quiz node records from table quiz_node_properties
   db_delete('quiz_node_properties')
-  ->condition('nid', $node->nid)
-  ->execute();
+    ->condition('nid', $node->nid)
+    ->execute();
   // Remove quiz node records from table quiz_node_relationship
   db_delete('quiz_node_relationship')
-  ->condition('parent_nid', $node->nid)
-  ->execute();
+    ->condition('parent_nid', $node->nid)
+    ->execute();
   // Remove quiz node records from table quiz_node_results
   db_delete('quiz_node_results')
-  ->condition('nid', $node->nid)
-  ->execute();
+    ->condition('nid', $node->nid)
+    ->execute();
   // Remove quiz node records from table quiz_node_result_options
   db_delete('quiz_node_result_options')
-  ->condition('nid', $node->nid)
-  ->execute();
+    ->condition('nid', $node->nid)
+    ->execute();
 }
 
 /**
@@ -892,8 +892,7 @@ function _quiz_get_node_defaults() {
     'randomization' => 0,
     'backwards_navigation' => 1,
     'repeat_until_correct' => 0,
-    'feedback_time' => 0,
-    'display_feedback' => 1,
+    'review_options' => array(),
     'quiz_open' => 0,
     'quiz_close' => 0,
     'takes' => 0,
@@ -952,36 +951,27 @@ function quiz_menu_load($nid) {
  * Implements hook_load().
  *
  * Load up quiz properties onto quiz nodes.
- * @todo this is not a good way to do it. should use 1 query
  */
 function quiz_load($nodes) {
+  foreach ($nodes as $node) {
+    $vids[] = $node->vid;
+  }
+
+  $quiz_properties = entity_load('quiz', FALSE, array('vid' => $vids));
+
   foreach ($nodes as $nid => &$node) {
-    // Fetching defaults.
-    $default_additions = _quiz_get_node_defaults();
-
-    // Fetching node settings.
-    $query = db_select('quiz_node_properties', 'qnp');
-    foreach (array_keys($default_additions) as $field) {
-      $query->addField('qnp', $field);
+    foreach ($quiz_properties[$node->vid] as $prop => $value) {
+      $node->$prop = $value;
     }
-    $query->condition('vid', $node->vid);
-    $query->condition('nid', $node->nid);
-    $fetched_additions = (array) $query->execute()->fetch();
+  }
 
-    $additions = ($fetched_additions) ? (object) ($fetched_additions += $default_additions) : NULL;
-    // Fetching result options.
-    $query = db_select('quiz_node_result_options', 'qnro');
-    $query->fields('qnro');
-    $query->condition('nid', $node->nid);
-    $query->condition('vid', $node->vid);
-    $options = $query->execute();
-    foreach ($options as $option) {
-      $additions->resultoptions[$option->option_id] = (array) $option;
-    }
-
-    foreach ($additions as $property => &$value) {
-      $node->$property = $value;
-    }
+  // Fetching result options.
+  $query = db_select('quiz_node_result_options', 'qnro');
+  $query->fields('qnro');
+  $query->condition('vid', $vids);
+  $options = $query->execute();
+  foreach ($options as $option) {
+    $nodes[$option->nid]->resultoptions[$option->option_id] = (array) $option;
   }
 }
 
@@ -1164,11 +1154,12 @@ function quiz_form(&$node, &$form_state) {
     '#description' => t('The difference between "random order" and "random questions" is that with "random questions" questions are drawn randomly from a pool of questions. With "random order" the quiz will always consist of the same questions. With "Categorized random questions" you can choose several terms questions should be drawn from, and you can also choose how many questions that should be drawn from each, and max score for each term.'),
     '#default_value' => $node->randomization,
   );
-  $form['taking']['review'] = array(
+  $form['taking']['review_options'] = array(
     '#type' => 'fieldset',
     '#title' => t('Review options'),
     '#collapsible' => FALSE,
     '#collapsed' => FALSE,
+    '#tree' => TRUE,
   );
 
   $types_of_feedback = array(
@@ -1180,8 +1171,9 @@ function quiz_form(&$node, &$form_state) {
     'solution' => "Correct answer",
     'quiz' => "Quiz feedback",
   );
+
   foreach (array('question' => 'After the question', 'end' => 'After the quiz') as $key => $when) {
-    $form['taking']['review'][$key] = array(
+    $form['taking']['review_options'][$key] = array(
       '#title' => $when,
       '#type' => 'checkboxes',
       '#options' => $types_of_feedback,
@@ -1603,8 +1595,8 @@ function quiz_node_prepare($node) {
  */
 function quiz_user_cancel($edit, $account, $method) {
   db_delete('quiz_user_settings')
-  ->condition('uid', $account->uid)
-  ->execute();
+    ->condition('uid', $account->uid)
+    ->execute();
   if (variable_get('quiz_durod', 0)) {
     _quiz_delete_users_results($account->uid);
   }
@@ -1660,11 +1652,11 @@ function quiz_type_confirm($node, $op = NULL) {
  */
 function quiz_get_all_titles() {
   return db_select('node', 'n')
-  ->fields('n', array('nid', 'title'))
-  ->condition('n.type', 'quiz')
-  ->addTag('node_access')
-  ->execute()
-  ->fetchAllKeyed();
+      ->fields('n', array('nid', 'title'))
+      ->condition('n.type', 'quiz')
+      ->addTag('node_access')
+      ->execute()
+      ->fetchAllKeyed();
 }
 
 /**
@@ -1678,8 +1670,8 @@ function quiz_get_all_version_titles() {
   $query = db_select('node', 'n');
   $query->join('node_revision', 'nr', 'nr.nid = n.nid');
   $query->fields('nr', array('nid', 'vid', 'title'))
-  ->condition('n.type', 'quiz')
-  ->execute();
+    ->condition('n.type', 'quiz')
+    ->execute();
 
   $to_return = array();
   while ($res_o = $query->fetch()) {
@@ -1802,11 +1794,11 @@ function quiz_get_pass_rate($nid, $vid) {
 function quiz_update_quiz_question_relationship($old_quiz_vid, $new_quiz_vid, $quiz_nid) {
   // query for questions in previous version
   $result = db_select('quiz_node_relationship', 'qnr')
-  ->fields('qnr', array('parent_nid', 'child_nid', 'child_vid', 'question_status', 'weight', 'max_score', 'auto_update_max_score', 'qnr_id', 'qnr_pid'))
-  ->condition('parent_nid', $quiz_nid)
-  ->condition('parent_vid', $old_quiz_vid)
-  ->condition('question_status', QUESTION_NEVER, '!=')
-  ->execute();
+    ->fields('qnr', array('parent_nid', 'child_nid', 'child_vid', 'question_status', 'weight', 'max_score', 'auto_update_max_score', 'qnr_id', 'qnr_pid'))
+    ->condition('parent_nid', $quiz_nid)
+    ->condition('parent_vid', $old_quiz_vid)
+    ->condition('question_status', QUESTION_NEVER, '!=')
+    ->execute();
 
   // only proceed if query returned data
   if ($result->rowCount()) {
@@ -1823,23 +1815,23 @@ function quiz_update_quiz_question_relationship($old_quiz_vid, $new_quiz_vid, $q
     // @todo this is copy pasta from quiz_set_questions
     foreach ($questions as $question) {
       db_update('quiz_node_relationship')
-      ->condition('qnr_pid', $question['old_qnr_id'])
-      ->condition('parent_nid', $quiz_nid)
-      ->condition('parent_vid', $new_quiz_vid)
-      ->fields(array('qnr_pid' => $question['qnr_id']))
-      ->execute();
+        ->condition('qnr_pid', $question['old_qnr_id'])
+        ->condition('parent_nid', $quiz_nid)
+        ->condition('parent_vid', $new_quiz_vid)
+        ->fields(array('qnr_pid' => $question['qnr_id']))
+        ->execute();
     }
   }
 
   /* Update terms if any */
   $result = db_select('quiz_terms', 'qt')
-  ->fields('qt', array('nid', 'tid', 'weight', 'max_score', 'number'))
-  ->condition('vid', $old_quiz_vid)
-  ->execute();
+    ->fields('qt', array('nid', 'tid', 'weight', 'max_score', 'number'))
+    ->condition('vid', $old_quiz_vid)
+    ->execute();
   // only proceed if query returned data
   if ($result->rowCount()) {
     $insert_query = db_insert('quiz_terms')
-    ->fields(array('nid', 'vid', 'tid', 'weight', 'max_score', 'number'));
+      ->fields(array('nid', 'vid', 'tid', 'weight', 'max_score', 'number'));
     while ($quiz_term = $result->fetchAssoc()) {
       $insert_query->values(array(
         'nid' => $quiz_nid,
@@ -1988,9 +1980,9 @@ function quiz_take_question($quiz, $question_number) {
       $time = 1;
     }
     db_update('quiz_node_results')
-    ->fields(array('time_left' => $time))
-    ->condition('result_id', $_SESSION['quiz'][$quiz->nid]['result_id'])
-    ->execute();
+      ->fields(array('time_left' => $time))
+      ->condition('result_id', $_SESSION['quiz'][$quiz->nid]['result_id'])
+      ->execute();
 
     if ($time <= 1) {
       // Quiz has been timed out, run a loop to mark the remaining questions
@@ -2142,7 +2134,7 @@ function quiz_store_question_result($quiz, $result, $options) {
               AND result_id = :result_id", array(':question_nid' => $result->nid, ':question_vid' => $result->vid, ':result_id' => $result->result_id))->fetchField();
   if ($result_id_count > 0) {
     $update = db_update('quiz_node_results_answers')
-    ->fields(array(
+      ->fields(array(
       'is_correct' => (int) $result->is_correct,
       'points_awarded' => $points,
       'answer_timestamp' => REQUEST_TIME,
@@ -2159,20 +2151,20 @@ function quiz_store_question_result($quiz, $result, $options) {
   }
   else {
     $insert = db_insert('quiz_node_results_answers')
-    ->fields(array('question_nid', 'question_vid', 'result_id', 'is_correct', 'points_awarded', 'answer_timestamp', 'is_skipped', 'is_doubtful', 'number', 'tid'))
-    ->values(array(
-      'question_nid' => $result->nid,
-      'question_vid' => $result->vid,
-      'result_id' => $result->result_id,
-      'is_correct' => (int) $result->is_correct,
-      'points_awarded' => $points,
-      'answer_timestamp' => REQUEST_TIME,
-      'is_skipped' => (int) $result->is_skipped,
-      'is_doubtful' => (int) $result->is_doubtful,
-      'number' => $options['question_data']['number'],
-      'tid' => ($quiz->randomization == 3 && $result->tid) ? $result->tid : 0,
-    ))
-    ->execute();
+      ->fields(array('question_nid', 'question_vid', 'result_id', 'is_correct', 'points_awarded', 'answer_timestamp', 'is_skipped', 'is_doubtful', 'number', 'tid'))
+      ->values(array(
+        'question_nid' => $result->nid,
+        'question_vid' => $result->vid,
+        'result_id' => $result->result_id,
+        'is_correct' => (int) $result->is_correct,
+        'points_awarded' => $points,
+        'answer_timestamp' => REQUEST_TIME,
+        'is_skipped' => (int) $result->is_skipped,
+        'is_doubtful' => (int) $result->is_doubtful,
+        'number' => $options['question_data']['number'],
+        'tid' => ($quiz->randomization == 3 && $result->tid) ? $result->tid : 0,
+      ))
+      ->execute();
   }
 }
 
@@ -2212,13 +2204,13 @@ function quiz_end_scoring($quiz, $result_id) {
     $score['percentage_score'] = 0;
   }
   db_update('quiz_node_results')
-  ->fields(array(
-    'is_evaluated' => $score['is_evaluated'],
-    'time_end' => REQUEST_TIME,
-    'score' => $score['percentage_score'],
-  ))
-  ->condition('result_id', $result_id)
-  ->execute();
+    ->fields(array(
+      'is_evaluated' => $score['is_evaluated'],
+      'time_end' => REQUEST_TIME,
+      'score' => $score['percentage_score'],
+    ))
+    ->condition('result_id', $result_id)
+    ->execute();
   if ($user->uid) {
     $score['passing'] = quiz_is_passed($user->uid, $quiz->nid, $quiz->vid);
   }
@@ -2399,17 +2391,17 @@ function quiz_email_results_format($type, $target) {
   if ($type == 'body') {
     if ($target == 'author') {
       return t('Dear !author') . "\n\n" .
-      t('!taker attended the quiz !title on !date') . "\n" .
-      t('Test Description : !desc') . "\n" .
-      t('!taker got !correct out of !total points in !minutes minutes. Score given in percentage is !percentage') . "\n" .
-      t('You can access the result here !url') . "\n";
+        t('!taker attended the quiz !title on !date') . "\n" .
+        t('Test Description : !desc') . "\n" .
+        t('!taker got !correct out of !total points in !minutes minutes. Score given in percentage is !percentage') . "\n" .
+        t('You can access the result here !url') . "\n";
     }
     if ($target == 'taker') {
       return t('Dear !taker') . "\n\n" .
-      t('You attended the quiz !title on !date') . "\n" .
-      t('Test Description : !desc') . "\n" .
-      t('You got !correct out of !total points in !minutes minutes. Score given in percentage is !percentage') . "\n" .
-      t('You can access the result here !url') . "\n";
+        t('You attended the quiz !title on !date') . "\n" .
+        t('Test Description : !desc') . "\n" .
+        t('You got !correct out of !total points in !minutes minutes. Score given in percentage is !percentage') . "\n" .
+        t('You can access the result here !url') . "\n";
     }
   }
 }
@@ -2435,19 +2427,19 @@ function quiz_email_results_format($type, $target) {
 function quiz_update_total_score($quiz, $result_id) {
   $score = quiz_calculate_score($quiz, $result_id);
   db_update('quiz_node_results')
-  ->fields(array(
-    'score' => $score['percentage_score'],
-  ))
-  ->condition('result_id', $result_id)
-  ->execute();
+    ->fields(array(
+      'score' => $score['percentage_score'],
+    ))
+    ->condition('result_id', $result_id)
+    ->execute();
   if ($score['is_evaluated']) {
     // Call hook_quiz_scored().
     module_invoke_all('quiz_scored', $quiz, $score, $result_id);
     _quiz_maintain_results($quiz, $result_id);
     db_update('quiz_node_results')
-    ->fields(array('is_evaluated' => 1))
-    ->condition('result_id', $result_id)
-    ->execute();
+      ->fields(array('is_evaluated' => 1))
+      ->condition('result_id', $result_id)
+      ->execute();
   }
   return $score['percentage_score'];
 }
@@ -2464,36 +2456,36 @@ function quiz_update_max_score_properties($quizzes_to_update) {
   }
 
   db_update('quiz_node_properties')
-  ->expression('max_score', 'max_score_for_random * number_of_random_questions + (
+    ->expression('max_score', 'max_score_for_random * number_of_random_questions + (
       SELECT COALESCE(SUM(max_score), 0)
       FROM {quiz_node_relationship} qnr
       WHERE qnr.question_status = ' . QUESTION_ALWAYS . '
       AND parent_vid = {quiz_node_properties}.vid)')
-  ->condition('vid', $quizzes_to_update, 'IN')
-  ->execute();
+    ->condition('vid', $quizzes_to_update, 'IN')
+    ->execute();
 
   db_update('quiz_node_properties')
-  ->expression('max_score', '(SELECT COALESCE(SUM(qt.max_score * qt.number), 0)
+    ->expression('max_score', '(SELECT COALESCE(SUM(qt.max_score * qt.number), 0)
       FROM {quiz_terms} qt
       WHERE qt.nid = {quiz_node_properties}.nid AND qt.vid = {quiz_node_properties}.vid)')
-  ->condition('randomization', 3)
-  ->condition('vid', $quizzes_to_update, 'IN')
-  ->execute();
+    ->condition('randomization', 3)
+    ->condition('vid', $quizzes_to_update, 'IN')
+    ->execute();
 
   db_update('node_revision')
-  ->fields(array('timestamp' => REQUEST_TIME))
-  ->condition('vid', $quizzes_to_update, 'IN')
-  ->execute();
+    ->fields(array('timestamp' => REQUEST_TIME))
+    ->condition('vid', $quizzes_to_update, 'IN')
+    ->execute();
 
   db_update('node')
-  ->fields(array('changed' => REQUEST_TIME))
-  ->condition('vid', $quizzes_to_update, 'IN')
-  ->execute();
+    ->fields(array('changed' => REQUEST_TIME))
+    ->condition('vid', $quizzes_to_update, 'IN')
+    ->execute();
 
   $results_to_update = db_query('SELECT vid FROM {quiz_node_properties} WHERE vid IN (:vid) AND max_score <> :max_score', array(':vid' => $quizzes_to_update, ':max_score' => 0))->fetchCol();
   if (!empty($results_to_update)) {
     db_update('quiz_node_results')
-    ->expression('score', 'ROUND(
+      ->expression('score', 'ROUND(
         100 * (
           SELECT COALESCE (SUM(a.points_awarded), 0)
           FROM {quiz_node_results_answers} a
@@ -2504,8 +2496,8 @@ function quiz_update_max_score_properties($quizzes_to_update) {
           WHERE qnp.vid = {quiz_node_results}.vid
         )
       )')
-    ->condition('vid', $results_to_update, 'IN')
-    ->execute();
+      ->condition('vid', $results_to_update, 'IN')
+      ->execute();
   }
 }
 
@@ -2643,13 +2635,13 @@ function quiz_availability($quiz) {
  */
 function quiz_create_rid($quiz) {
   $result_id = db_insert('quiz_node_results')
-  ->fields(array(
-    'nid' => $quiz->nid,
-    'vid' => $quiz->vid,
-    'uid' => $GLOBALS['user']->uid,
-    'time_start' => REQUEST_TIME,
-  ))
-  ->execute();
+    ->fields(array(
+      'nid' => $quiz->nid,
+      'vid' => $quiz->vid,
+      'uid' => $GLOBALS['user']->uid,
+      'time_start' => REQUEST_TIME,
+    ))
+    ->execute();
   if (!is_numeric($result_id)) {
     form_set_error(t('There was a problem starting the @quiz. Please try again later.', array('@quiz' => QUIZ_NAME), array('langcode' => 'error')));
     return FALSE;
@@ -2938,9 +2930,9 @@ function quiz_set_questions(&$quiz, $questions, $set_new_revision = FALSE) {
   // proven error prone as the module has gained complexity (See 5.x-2.0-RC2).
   // So we go with the brute force method:
   db_delete('quiz_node_relationship')
-  ->condition('parent_nid', $quiz->nid)
-  ->condition('parent_vid', $quiz->vid)
-  ->execute();
+    ->condition('parent_nid', $quiz->nid)
+    ->condition('parent_vid', $quiz->vid)
+    ->execute();
 
   if (empty($questions)) {
     return TRUE; // This is not an error condition.
@@ -2970,11 +2962,11 @@ function quiz_set_questions(&$quiz, $questions, $set_new_revision = FALSE) {
   // @todo this is copy pasta from quiz_update_quiz_question_relationship
   foreach ($question_inserts as $question_insert) {
     db_update('quiz_node_relationship')
-    ->condition('qnr_pid', $question_insert['old_qnr_id'])
-    ->condition('parent_vid', $quiz->vid)
-    ->condition('parent_nid', $quiz->nid)
-    ->fields(array('qnr_pid' => $question_insert['qnr_id']))
-    ->execute();
+      ->condition('qnr_pid', $question_insert['old_qnr_id'])
+      ->condition('parent_vid', $quiz->vid)
+      ->condition('parent_nid', $quiz->nid)
+      ->fields(array('qnr_pid' => $question_insert['qnr_id']))
+      ->execute();
   }
 
   quiz_update_max_score_properties(array($quiz->vid));
@@ -3054,7 +3046,7 @@ function _quiz_insert_resultoptions($node) {
   }
 
   $query = db_insert('quiz_node_result_options')
-  ->fields(array('nid', 'vid', 'option_name', 'option_summary', 'option_summary_format', 'option_start', 'option_end'));
+    ->fields(array('nid', 'vid', 'option_name', 'option_summary', 'option_summary_format', 'option_start', 'option_end'));
 
   foreach ($node->resultoptions as $id => $option) {
     if (!empty($option['option_name'])) {
@@ -3088,8 +3080,8 @@ function _quiz_insert_resultoptions($node) {
 function _quiz_update_resultoptions($node) {
   // Brute force method. Easier to get correct, and probably faster as well.
   db_delete('quiz_node_result_options')
-  ->condition('vid', $node->vid)
-  ->execute();
+    ->condition('vid', $node->vid)
+    ->execute();
   _quiz_insert_resultoptions($node);
 }
 
@@ -3177,7 +3169,7 @@ function _quiz_get_summary_text($quiz, $score) {
 function _quiz_pick_result_option($qnid, $qvid, $score) {
   return db_query('SELECT option_summary, option_summary_format FROM {quiz_node_result_options}
       WHERE nid = :nid AND vid = :vid AND :option BETWEEN option_start AND option_end', array(':nid' => $qnid, ':vid' => $qvid, ':option' => $score)
-  )->fetch();
+    )->fetch();
 }
 
 /**
@@ -3205,7 +3197,7 @@ function _quiz_get_random_questions($quiz) {
     else {
       // Select random question from assigned pool.
       $result = db_query_range(
-      "SELECT child_nid as nid, child_vid as vid
+        "SELECT child_nid as nid, child_vid as vid
         FROM {quiz_node_relationship} qnr
         JOIN {node} n on qnr.child_nid = n.nid
         WHERE qnr.parent_vid = :parent_vid
@@ -3216,7 +3208,7 @@ function _quiz_get_random_questions($quiz) {
         ':parent_vid' => $quiz->vid,
         ':parent_nid' => $quiz->nid,
         ':question_status' => QUESTION_RANDOM
-      )
+        )
       );
       while ($question_node = $result->fetchAssoc()) {
         $question_node['random'] = TRUE;
@@ -3262,7 +3254,7 @@ function _quiz_get_random_taxonomy_question_ids($tid, $num_random) {
     INNER JOIN {taxonomy_index} tn USING (nid)
     WHERE n.status = 1 AND tn.tid IN ($term_ids)
     AND n.type IN ('" . implode("','", array_keys(_quiz_get_question_types()))
-  . "') ORDER BY RAND()");
+    . "') ORDER BY RAND()");
 
   $questions = array();
   while ($question_node = db_fetch_array($result)) {
@@ -3408,8 +3400,8 @@ function _quiz_get_quizzes($uid = 0) {
   $results = array();
   $args = array();
   $query = db_select('node', 'n')
-  ->fields('n', array('nid', 'vid', 'title', 'uid', 'created'))
-  ->fields('u', array('name'));
+    ->fields('n', array('nid', 'vid', 'title', 'uid', 'created'))
+    ->fields('u', array('name'));
   $query->leftJoin('users', 'u', 'u.uid = n.uid');
   $query->condition('n.type', 'quiz');
   if ($uid != 0) {
@@ -3668,9 +3660,9 @@ function _quiz_check_num_random(&$node) {
     return;
   }
   db_delete('quiz_node_relationship')
-  ->condition('question_status', QUESTION_RANDOM)
-  ->condition('parent_vid', $node->vid)
-  ->execute();
+    ->condition('question_status', QUESTION_RANDOM)
+    ->condition('parent_vid', $node->vid)
+    ->execute();
 }
 
 /**
@@ -3685,8 +3677,8 @@ function _quiz_check_num_always(&$node) {
     return;
   }
   db_delete('quiz_node_relationship')
-  ->condition('parent_vid', $node->vid)
-  ->execute();
+    ->condition('parent_vid', $node->vid)
+    ->execute();
 }
 
 /**
@@ -3740,17 +3732,17 @@ function quiz_copy_questions($node) {
 
     // Save the relationship between the new question and the quiz.
     db_insert('quiz_node_relationship')
-    ->fields(array(
-      'parent_nid' => $node->nid,
-      'parent_vid' => $node->vid,
-      'child_nid' => $original_question->nid,
-      'child_vid' => $original_question->vid,
-      'question_status' => $res_o->question_status,
-      'weight' => $res_o->weight,
-      'max_score' => $res_o->max_score,
-      'auto_update_max_score' => $res_o->auto_update_max_score,
-    ))
-    ->execute();
+      ->fields(array(
+        'parent_nid' => $node->nid,
+        'parent_vid' => $node->vid,
+        'child_nid' => $original_question->nid,
+        'child_vid' => $original_question->vid,
+        'question_status' => $res_o->question_status,
+        'weight' => $res_o->weight,
+        'max_score' => $res_o->max_score,
+        'auto_update_max_score' => $res_o->auto_update_max_score,
+      ))
+      ->execute();
   }
 }
 
@@ -3779,8 +3771,8 @@ function _quiz_maintain_results($quiz, $result_id) {
       $best_result_id = db_query('SELECT result_id FROM {quiz_node_results}
           WHERE nid = :nid AND uid = :uid AND is_evaluated = :is_evaluated
           ORDER BY score DESC', array(':nid' => $quiz->nid, ':uid' => $user->uid, ':is_evaluated' => 1)
-      )
-      ->fetchField();
+        )
+        ->fetchField();
       if (!$best_result_id) {
         return;
       }
@@ -3823,12 +3815,12 @@ function quiz_delete_results($result_ids) {
   }
 
   db_delete('quiz_node_results_answers')
-  ->condition('result_id', $result_ids, 'IN')
-  ->execute();
+    ->condition('result_id', $result_ids, 'IN')
+    ->execute();
 
   db_delete('quiz_node_results')
-  ->condition('result_id', $result_ids, 'IN')
-  ->execute();
+    ->condition('result_id', $result_ids, 'IN')
+    ->execute();
 }
 
 /**
@@ -3849,8 +3841,8 @@ function _quiz_load_user_settings($uid = NULL) {
   $uid = isset($uid) ? $uid : $GLOBALS['user']->uid;
 
   $query = db_select('quiz_user_settings', 'qus')
-  ->fields('qus')
-  ->condition('uid', $uid);
+    ->fields('qus')
+    ->condition('uid', $uid);
   $res = $query->execute()->fetchAssoc();
   if (!empty($res)) {
     foreach ($res as $key => $value) {
@@ -3858,13 +3850,12 @@ function _quiz_load_user_settings($uid = NULL) {
         $settings[$key] = $value;
       }
     }
-    // TODO : Reviews this later.
     $settings['resultoptions'][] = db_select('quiz_node_result_options', 'qnro')
-    ->fields('qnro')
-    ->condition('nid', $res['nid'])
-    ->condition('vid', $res['vid'])
-    ->execute()
-    ->fetchAll();
+      ->fields('qnro')
+      ->condition('nid', $res['nid'])
+      ->condition('vid', $res['vid'])
+      ->execute()
+      ->fetchAll();
     return $settings;
   }
   return array();
