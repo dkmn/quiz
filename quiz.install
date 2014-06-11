@@ -590,19 +590,6 @@ function quiz_schema() {
         'not null' => TRUE,
         'default' => 0,
       ),
-      'feedback_time' => array(
-        'type' => 'int',
-        'size' => 'tiny',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-      ),
-      'display_feedback' => array(
-        'type' => 'int',
-        'size' => 'tiny',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-        'default' => 1,
-      ),
       'takes' => array(
         'type' => 'int',
         'size' => 'tiny',
@@ -832,8 +819,8 @@ function quiz_update_7409(&$sandbox) {
  */
 function quiz_uninstall() {
   db_delete('variable')
-  ->condition('name', "quiz_%", 'like')
-  ->execute();
+    ->condition('name', "quiz_%", 'like')
+    ->execute();
 }
 
 /**
@@ -914,14 +901,36 @@ function quiz_update_7504() {
 
 /**
  * Revamping quiz feedback options.
- *
- * @todo migration from these fields
  */
 function quiz_update_7505() {
-  db_drop_field('quiz_node_properties', 'feedback_time');
-  db_drop_field('quiz_node_properties', 'display_feedback');
   db_add_field('quiz_node_properties', 'review_options', array(
     'type' => 'text',
     'serialize' => TRUE,
   ));
+
+  drupal_get_schema(NULL, TRUE);
+
+  $sql = "SELECT * FROM {quiz_node_properties}";
+  $result = db_query($sql);
+  while ($row = $result->fetch()) {
+    if ($row->feedback_time == 0) {
+      $row->review_options['end']['answer_feedback'] = 'answer_feedback';
+      if ($row->show_feedback) {
+        $row->review_options['end']['solution'] = 'solution';
+      }
+    }
+    if ($row->feedback_time == 1) {
+      $row->review_options['question']['answer_feedback'] = 'answer_feedback';
+      if ($row->show_feedback) {
+        $row->review_options['question']['solution'] = 'solution';
+      }
+    }
+    if ($row->feedback_time == 2) {
+      $row->review_options = array();
+    }
+    drupal_write_record('quiz_node_properties', $row, array('nid', 'vid'));
+  }
+
+  db_drop_field('quiz_node_properties', 'feedback_time');
+  db_drop_field('quiz_node_properties', 'display_feedback');
 }

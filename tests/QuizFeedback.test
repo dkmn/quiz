@@ -50,7 +50,7 @@ class QuizFeedback extends QuizTestCase {
     // Feedback only after each question.
     // @todo when feedback is only after the question, the results of Q3
     // aren't visible.
-    $quiz_node->feedback_time = QUIZ_FEEDBACK_QUESTION;
+    $quiz_node->review_options = array('question' => array('answer_feedback' => 'answer_feedback'));
     node_save($quiz_node);
     $this->drupalGet("node/{$quiz_node->nid}/take");
     $this->drupalPost(NULL, array(
@@ -78,7 +78,7 @@ class QuizFeedback extends QuizTestCase {
     $this->assertNoText('Q3Feedback');
 
     // Feedback only after the quiz.
-    $quiz_node->feedback_time = QUIZ_FEEDBACK_END;
+    $quiz_node->review_options = array('end' => array('answer_feedback' => 'answer_feedback'));
     node_save($quiz_node);
     $this->drupalGet("node/{$quiz_node->nid}/take");
     $this->drupalPost(NULL, array(
@@ -95,7 +95,7 @@ class QuizFeedback extends QuizTestCase {
     $this->assertText('Q3Feedback');
 
     // No feedback at any time.
-    $quiz_node->feedback_time = QUIZ_FEEDBACK_NEVER;
+    $quiz_node->review_options = array();
     node_save($quiz_node);
     $this->drupalGet("node/{$quiz_node->nid}/take");
     $this->drupalPost(NULL, array(

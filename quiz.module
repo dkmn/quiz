@@ -40,13 +40,6 @@ define('QUESTION_NEVER', 2);
 define('QUIZ_NAME', _quiz_get_quiz_name());
 
 /**
- * Define feedback statuses.
- */
-define('QUIZ_FEEDBACK_END', 0);
-define('QUIZ_FEEDBACK_QUESTION', 1);
-define('QUIZ_FEEDBACK_NEVER', 2);
-
-/**
  * Define options for keeping results.
  */
 define('QUIZ_KEEP_BEST', 0);
@@ -960,7 +953,7 @@ function quiz_load($nodes) {
   $quiz_properties = entity_load('quiz', FALSE, array('vid' => $vids));
 
   foreach ($nodes as $nid => &$node) {
-    foreach ($quiz_properties[$node->vid] as $prop => $value) {
+    foreach ($quiz_properties[$node->nid] as $prop => $value) {
       $node->$prop = $value;
     }
   }
@@ -1162,21 +1155,22 @@ function quiz_form(&$node, &$form_state) {
     '#tree' => TRUE,
   );
 
-  $types_of_feedback = array(
+  $review_options = array(
     'attempt' => "Attempt",
     'correct' => "Whether correct",
     'score' => "Score",
-    'answer' => 'Answer feedback',
-    'question' => 'Question feedback',
+    'answer_feedback' => 'Answer feedback',
+    'question_feedback' => 'Question feedback',
     'solution' => "Correct answer",
-    'quiz' => "Quiz feedback",
+    'quiz_feedback' => "Quiz feedback",
   );
 
   foreach (array('question' => 'After the question', 'end' => 'After the quiz') as $key => $when) {
     $form['taking']['review_options'][$key] = array(
       '#title' => $when,
       '#type' => 'checkboxes',
-      '#options' => $types_of_feedback,
+      '#options' => $review_options,
+      '#default_value' => isset($node->review_options[$key]) ? $node->review_options[$key] : array(),
     );
   }
 
@@ -3479,20 +3473,6 @@ function _quiz_get_answers($quiz, $result_id) {
 function _quiz_get_quiz_name() {
   // @todo: remove all the quiz_name stuff? Isn't there better ways to do this?
   return variable_get('quiz_name', 'Quiz');
-}
-
-/**
- * Get an array of feedback options.
- *
- * @return
- *   An array of feedback options.
- */
-function _quiz_get_feedback_options() {
-  return array(
-    QUIZ_FEEDBACK_END => t('At the end of the @quiz', array('@quiz' => QUIZ_NAME)),
-    QUIZ_FEEDBACK_QUESTION => t('After each question'),
-    QUIZ_FEEDBACK_NEVER => t('Do not show'),
-  );
 }
 
 /**
