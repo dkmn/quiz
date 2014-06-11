@@ -725,7 +725,6 @@ function quiz_insert($node) {
   $entity->summary_default_format = is_array($node->summary_default) ? $node->summary_default['format'] : $node->summary_default_format;
   $entity->tid = (isset($node->tid) ? $node->tid : 0);
   $entity->max_score = $max_score;
-  dpm($entity);
   drupal_write_record('quiz_node_properties', $entity);
 
   _quiz_insert_resultoptions($node);
