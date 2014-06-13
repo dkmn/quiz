@@ -670,18 +670,18 @@ abstract class QuizQuestionResponse {
     }
     $form['question'] = $this->getReportFormQuestion($showpoints, $showfeedback);
 
-    if ($this->canReview('score')) {
+    if ($this->canReview('score') || $allow_scoring) {
       $form['score'] = $this->getReportFormScore($showpoints, $showfeedback, $allow_scoring);
     }
     else {
       $form['score'] = array('#markup' => '<span class="quiz-report-score">?</span>');
     }
-    
+
     $form['answer_feedback'] = $this->getReportFormAnswerFeedback($showpoints, $showfeedback, $allow_scoring);
 
     $form['max_score'] = array(
       '#type' => 'value',
-      '#value' => $this->canReview('score') ? $this->getMaxScore() : '?',
+      '#value' => ($this->canReview('score') || $allow_scoring) ? $this->getMaxScore() : '?',
     );
 
     if ($this->canReview('attempt')) {
