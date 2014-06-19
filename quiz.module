@@ -675,18 +675,10 @@ function quiz_form_quiz_node_form_submit($form, &$form_state) {
  * Implements hook_insert().
  */
 function quiz_insert($node) {
+  global $user;
+
   // Need to set max_score if this is a cloned node
   $max_score = 0;
-
-  // Apply defaults.
-  $defaults = _quiz_load_user_settings(variable_get('quiz_def_uid', 1)) + _quiz_get_node_defaults();
-  foreach ($defaults as $key => $value) {
-    if (!isset($node->$key)) {
-      $node->$key = $value;
-    }
-  }
-
-  _quiz_save_user_settings($node);
 
   // Copy all the questions belonging to the quiz if this is a new translation.
   if ($node->is_new && isset($node->translation_source)) {
@@ -717,52 +709,72 @@ function quiz_insert($node) {
   _quiz_check_num_random($node);
   _quiz_check_num_always($node);
 
-  $entity = clone $node;
-  $entity->aid = !empty($node->aid) ? $node->aid : 0;
-  $entity->summary_pass = is_array($node->summary_pass) ? $node->summary_pass['value'] : $node->summary_pass;
-  $entity->summary_pass_format = is_array($node->summary_pass) ? $node->summary_pass['format'] : $node->summary_pass_format;
-  $entity->summary_default = is_array($node->summary_default) ? $node->summary_default['value'] : $node->summary_default;
-  $entity->summary_default_format = is_array($node->summary_default) ? $node->summary_default['format'] : $node->summary_default_format;
-  $entity->tid = (isset($node->tid) ? $node->tid : 0);
-  $entity->max_score = $max_score;
-  drupal_write_record('quiz_node_properties', $entity);
-
+  quiz_update_defaults($node);
   _quiz_insert_resultoptions($node);
+}
+
+function quiz_update_defaults($node) {
+  global $user;
+
+  $entity = clone $node;
+  $entity->aid = !empty($entity->aid) ? $entity->aid : 0;
+  $entity->summary_pass = is_array($entity->summary_pass) ? $entity->summary_pass['value'] : $entity->summary_pass;
+  $entity->summary_pass_format = is_array($entity->summary_pass) ? $entity->summary_pass['format'] : $entity->summary_pass_format;
+  $entity->summary_default = is_array($entity->summary_default) ? $entity->summary_default['value'] : $entity->summary_default;
+  $entity->summary_default_format = is_array($entity->summary_default) ? $entity->summary_default['format'] : $entity->summary_default_format;
+  $entity->tid = (isset($entity->tid) ? $entity->tid : 0);
+  $entity->max_score = $max_score;
+
+  // Save the node values.
+  $quiz_props = clone $entity;
+  $quiz_props->uid = 0;
+  quiz_save_properties($quiz_props);
+
+  // Save user defaults.
+  $user_defaults = clone $quiz_props;
+  $user_defaults->nid = 0;
+  $user_defaults->vid = 0;
+  $user_defaults->uid = $user->uid;
+  quiz_save_properties($user_defaults);
+
+  // Save global defaults.
+  $global_defaults = clone $user_defaults;
+  $global_defaults->uid = 0;
+  $global_defaults->nid = 0;
+  $global_defaults->vid = 0;
+  quiz_save_properties($global_defaults);
+}
+
+/**
+ * Insert or update the quiz node properties accordingly.
+ */
+function quiz_save_properties($entity) {
+  $sql = "SELECT qnp_id FROM {quiz_node_properties}
+    WHERE (nid = :nid AND nid > 0 AND vid = :vid AND vid > 0)
+    OR (uid = :uid and uid > 0)
+    OR (nid = :nid and uid = :uid and vid = :vid)";
+  $result = db_query($sql, array(':nid' => $entity->nid, ':uid' => $entity->uid, ':vid' => $entity->vid));
+  $entity->qnp_id = $result->fetchField();
+  entity_save('quiz', $entity);
 }
 
 /**
  * Implements hook_update().
  */
 function quiz_update($node) {
-  _quiz_save_user_settings($node);
   // Quiz node vid (revision) was updated.
   if (isset($node->revision) && $node->revision) {
-    // Insert a new row in the quiz_node_properties table.
-    $old_auto = isset($node->auto_created);
-    $node->auto_created = TRUE;
-    quiz_insert($node);
-    if (!$old_auto) {
-      unset($node->auto_created);
-    }
-
     // Create new quiz-question relation entries in the quiz_node_relationship
     // table.
     quiz_update_quiz_question_relationship($node->old_vid, $node->vid, $node->nid);
   }
 
-  // Quiz node vid (revision) was not updated.
-  else {
-    // Update an existing row in the quiz_node_properties table.
-    _quiz_common_presave_actions($node);
-    $entity = clone $node;
-    $entity->aid = !empty($node->aid) ? $node->aid : 0;
-    $entity->summary_pass = is_array($node->summary_pass) ? $node->summary_pass['value'] : $node->summary_pass;
-    $entity->summary_pass_format = is_array($node->summary_pass) ? $node->summary_pass['format'] : $node->summary_pass_format;
-    $entity->summary_default = is_array($node->summary_default) ? $node->summary_default['value'] : $node->summary_default;
-    $entity->summary_default_format = is_array($node->summary_default) ? $node->summary_default['format'] : $node->summary_default_format;
-    drupal_write_record('quiz_node_properties', $entity, array('nid', 'vid'));
-    _quiz_update_resultoptions($node);
-  }
+  // Update an existing row in the quiz_node_properties table.
+  _quiz_common_presave_actions($node);
+
+  quiz_update_defaults($node);
+  _quiz_update_resultoptions($node);
+
   _quiz_check_num_random($node);
   _quiz_check_num_always($node);
   quiz_update_max_score_properties(array($node->vid));
@@ -809,6 +821,11 @@ function quiz_field_extra_fields() {
       ),
       'remember_settings' => array(
         'label' => t('Remember settings'),
+        'description' => t('Checkbox for remembering quiz settings'),
+        'weight' => 0,
+      ),
+      'remember_global' => array(
+        'label' => t('Remember as global'),
         'description' => t('Checkbox for remembering quiz settings'),
         'weight' => 0,
       ),
@@ -1450,6 +1467,12 @@ function quiz_form(&$node, &$form_state) {
     '#description' => t('If this box is checked most of the quiz specific settings you have made will be remembered and will be your default settings next time you create a quiz.'),
     '#weight' => 49,
   );
+  $form['remember_global'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Remember as global'),
+    '#description' => t('If this box is checked most of the quiz specific settings you have made will be remembered and will be everyone\'s default settings next time you create a quiz.'),
+    '#weight' => 49,
+  );
   if (quiz_has_been_answered($node) && (!user_access('manual quiz revisioning') || variable_get('quiz_auto_revisioning', 1))) {
     $node->revision = 1;
     $node->log = t('The current revision has been answered. We create a new revision so that the reports from the existing answers stays correct.');
@@ -1561,14 +1584,10 @@ function quiz_node_presave($node) {
 function quiz_node_prepare($node) {
   if ($node->type == 'quiz' && !isset($node->nid)) {
     // If this is a new node we apply the user defaults for the quiz settings.
-    $settings = _quiz_load_user_settings();
-    if (!$settings) {
       if (arg(0) == 'node') {
         drupal_set_message(t('You are making your first @quiz. On this page you set the attributes, most of which you may tell the system to remember as defaults for the future. On the next screen you can add questions.', array('@quiz' => QUIZ_NAME)));
       }
-      $settings = _quiz_load_user_settings(variable_get('quiz_def_uid', 1));
-    }
-    $settings += _quiz_get_node_defaults();
+    $settings = quiz_get_defaults();
     foreach ($settings as $key => $value) {
       if (!isset($node->$key)) {
         $node->$key = $value;
@@ -1587,9 +1606,6 @@ function quiz_node_prepare($node) {
  * Implements hook_user_cancel().
  */
 function quiz_user_cancel($edit, $account, $method) {
-  db_delete('quiz_user_settings')
-    ->condition('uid', $account->uid)
-    ->execute();
   if (variable_get('quiz_durod', 0)) {
     _quiz_delete_users_results($account->uid);
   }
@@ -1759,18 +1775,6 @@ function quiz_get_number_of_questions($vid) {
   $always_count = _quiz_get_num_always_questions($vid);
   $rand_count = db_query('SELECT number_of_random_questions FROM {quiz_node_properties} WHERE vid = :vid', array(':vid' => $vid))->fetchField();
   return $always_count + (int) $rand_count;
-}
-
-/**
- * Finds out the pass rate for the quiz.
- *
- * @param $nid
- *   The quiz ID.
- * @return
- *   Returns the passing percentage of the quiz.
- */
-function quiz_get_pass_rate($nid, $vid) {
-  return db_query('SELECT pass_rate FROM {quiz_node_properties} WHERE nid = :nid AND vid = :vid', array(':nid' => $nid, ':vid' => $vid))->fetchField();
 }
 
 /**
@@ -3561,39 +3565,6 @@ function _quiz_is_taking_context() {
 }
 
 /**
- * Makes, saves and returns a new quiz node.
- *
- * @param $title
- *   The title of the new node.
- *
- * @return
- *   New quiz node object.
- */
-function quiz_make_new($title) {
-  global $user;
-  $new_node = new stdClass();
-  $new_node->title = $title;
-  $new_node->type = 'quiz';
-  $new_node->status = 1;
-  // Get default user settings.
-  $settings = _quiz_load_user_settings();
-  if (!$settings) {
-    $settings = _quiz_load_user_settings(variable_get('quiz_def_uid', 1));
-  }
-  $settings += _quiz_get_node_defaults();
-  foreach ($settings as $key => $value) {
-    $new_node->{$key} = $value;
-  }
-  $new_node->auto_created = TRUE;
-  $new_node->uid = $user->uid;
-  node_save($new_node);
-  if (is_numeric($new_node->nid)) {
-    drupal_set_message(t('Quiz %title has been created.', array('%title' => $title)));
-  }
-  return $new_node;
-}
-
-/**
  * Retrieves the quiz node from the menu router.
  *
  * @return
@@ -3814,65 +3785,30 @@ function quiz_delete_results($result_ids) {
  * @return
  *   An array of settings. The array is empty in case no settings are available.
  */
-function _quiz_load_user_settings($uid = NULL) {
-  // The def_uid property is the default user id. It is used if there are no
-  // settings store for the current user.
-  $uid = isset($uid) ? $uid : $GLOBALS['user']->uid;
-
-  $query = db_select('quiz_user_settings', 'qus')
-    ->fields('qus')
-    ->condition('uid', $uid);
-  $res = $query->execute()->fetchAssoc();
-  if (!empty($res)) {
-    foreach ($res as $key => $value) {
-      if (!in_array($key, array('nid', 'vid', 'uid'))) {
-        $settings[$key] = $value;
-      }
-    }
-    $settings['resultoptions'][] = db_select('quiz_node_result_options', 'qnro')
-      ->fields('qnro')
-      ->condition('nid', $res['nid'])
-      ->condition('vid', $res['vid'])
-      ->execute()
-      ->fetchAll();
-    return $settings;
-  }
-  return array();
-}
-
-/**
- * Fetch settings from a node and save them as the users default settings.
- *
- * @param $node
- *   Quiz node.
- */
-function _quiz_save_user_settings($node) {
+function quiz_get_defaults() {
   global $user;
-  $node = (object) $node;
-  // We do not save settings if the node has been created by the system,
-  // or if the user haven't requested it
-  if (isset($node->auto_created) || !isset($node->remember_settings) || !$node->remember_settings) {
-    return FALSE;
+
+  $entity = entity_load('quiz', FALSE, array(
+    'uid' => $user->uid,
+    'nid' => 0,
+    'vid' => 0,
+  ));
+
+  if (count($entity)) {
+    // We found user defaults.
+    return reset($entity);
   }
 
-  $summary_pass_format = filter_fallback_format();
-  if (isset($node->summary_pass['format']) && !empty($node->summary_pass['format'])) {
-    $summary_pass_format = $node->summary_pass['format'];
-  }
+  $entity = entity_load('quiz', FALSE, array(
+    'uid' => 0,
+    'nid' => 0,
+    'vid' => 0,
+  ));
 
-  $summary_default_format = filter_fallback_format();
-  if (isset($node->summary_default['format']) && !empty($node->summary_default['format'])) {
-    $summary_default_format = $node->summary_default['format'];
+  if (count($entity)) {
+    // Found global defaults.
+    return reset($entity);
   }
-
-  $values = (array) $node;
-  $values['uid'] = $user->uid;
-  $values['summary_pass'] = isset($node->summary_pass['value']) ? $node->summary_pass['value'] : '';
-  $values['summary_pass_format'] = $summary_pass_format;
-  $values['summary_default'] = $node->summary_default['value'];
-  $values['summary_default_format'] = $summary_default_format;
-  drupal_write_record('quiz_user_settings', $values);
-  drupal_set_message(t('Default settings have been saved'));
 }
 
 /**
@@ -4081,7 +4017,7 @@ function quiz_entity_info() {
       'controller class' => 'EntityAPIController',
       'base table' => 'quiz_node_properties',
       'entity keys' => array(
-        'id' => 'nid',
+        'id' => 'qnp_id',
       ),
       'views controller class' => 'EntityDefaultViewsController',
     ),
