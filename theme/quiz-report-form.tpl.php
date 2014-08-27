@@ -54,7 +54,7 @@ $q_image = $p . 'question_bg.png';
       <?php print drupal_render($sub_form['question']); ?>
     </div>
     <div class="dd">
-      <p><strong><?php print t('Response') ?>: </strong></p>
+      <p><strong><?php print t('Your response') ?>: </strong></p>
       <?php print drupal_render($sub_form['response']); ?>
     </div>
     <div class="dd">
