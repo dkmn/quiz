@@ -326,23 +326,6 @@ function quiz_admin_node_form_submit($form, &$form_state) {
 // QUIZ RESULTS ADMIN
 
 /**
- * Displays the quizzes by title with a link to the appropriate results
- * for that specific quiz.
- *
- * @return
- *  Formatted data.
- */
-function quiz_admin_quizzes() {
-  global $user;
-  $uid = $user->uid;
-  if (user_access('view any quiz results')) {
-    $uid = NULL;
-  }
-  $results = _quiz_get_quizzes($uid);
-  return theme('quiz_admin_quizzes', array('results' => $results));
-}
-
-/**
  * Quiz result report page for the quiz admin section
  *
  * @param $quiz
@@ -420,7 +403,7 @@ function quiz_questions($node) {
   else {
     $form = drupal_get_form('quiz_categorized_form', $node);
   }
-  return drupal_render($form);
+  return $form;
 }
 
 /**

@@ -49,7 +49,7 @@ function quiz_question_menu() {
  * Implements hook_theme().
  */
 function quiz_question_theme() {
-  return array(
+  $hooks = array(
     'quiz_question_creation_form' => array(
       'render element' => 'form',
       'file' => 'quiz_question.theme.inc',
@@ -59,6 +59,13 @@ function quiz_question_theme() {
       'file' => 'quiz_question.theme.inc',
     ),
   );
+
+  $hooks['quiz_question_feedback'] = array(
+    'variables' => NULL,
+    'pattern' => 'quiz_question_feedback__',
+  );
+
+  return $hooks;
 }
 
 /**
@@ -1008,7 +1015,7 @@ function quiz_question_answering_form_submit(&$form, &$form_state) {
 
   if (!isset($quiz_result->layout[$_SESSION['quiz'][$quiz->nid]['current']])) {
     // No more questions. Score quiz.
-    $score = quiz_end_scoring($quiz, $_SESSION['quiz'][$quiz->nid]['result_id']);
+    $score = quiz_end_scoring($_SESSION['quiz'][$quiz->nid]['result_id']);
 
     // Delete old results if necessary.
     _quiz_maintain_results($quiz, $quiz_result->result_id);
@@ -1039,7 +1046,7 @@ function quiz_question_answering_form_submit_back(&$form, &$form_state) {
   quiz_question_goto($quiz, $_SESSION['quiz'][$quiz->nid]['current'] - 1);
   $quiz_result = quiz_result_load($_SESSION['quiz'][$quiz->nid]['result_id']);
   $question = $quiz_result->layout[$_SESSION['quiz'][$quiz->nid]['current']];
-  if ($question['qnr_pid']) {
+  if (!empty($question['qnr_pid'])) {
     foreach ($quiz_result->layout as $question2) {
       if ($question2['qnr_id'] == $question['qnr_pid']) {
         quiz_question_goto($quiz, $question2['number']);
@@ -1124,4 +1131,22 @@ function quiz_question_element_validate(&$element, &$form_state) {
       '#markup' => drupal_render($feedback),
     );
   }
+}
+
+/**
+ * Theme the feedback for any question type.
+ */
+function theme_quiz_question_feedback($variables) {
+  $rows = $variables['data'];
+  $headers = array_intersect_key($variables['labels'], $rows[0]);
+
+  return theme('table', array('header' => $headers, 'rows' => $rows));
+
+}
+
+/**
+ * Helper function to faciliate icon display, like "correct" or "selected".
+ */
+function quiz_icon($icon) {
+  return theme('quiz_answer_result', array('type' => $icon));
 }
